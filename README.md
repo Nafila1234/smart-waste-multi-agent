@@ -85,7 +85,7 @@ To connect them within the system:
 ## 4. Repository Structure
 
 ```text
-DM-Project/
+smart-waste-multi-agent/
 ├── visual_agent/        # CNN notebooks and code
 ├── prediction_agent/    # Linear Regression notebooks and code
 ├── routing_agent/       # Decision Tree notebooks and code
