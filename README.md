@@ -42,12 +42,12 @@ The system consists of three independent agents coordinated through a central co
 
 The system supports six waste categories:
 
-- cardboard
+- battery
 - glass
 - metal
-- paper
+- organic
 - plastic
-- trash
+- paper
 
 **Naming convention:** all waste class labels are written in lowercase.
 
@@ -59,7 +59,7 @@ The system supports six waste categories:
 - **Source:** Kaggle
 - **Purpose:** Training and evaluating the Vision Agent.
 - **Classes:** Six waste categories.
-- **Link:** [add link]
+- **Link:** https://www.kaggle.com/datasets/quangtheng/garbage-classification-6-classes-775class
 
 ### 3.2. Smart Waste Bin Sensor Simulation Dataset
 - **Source:** Kaggle
