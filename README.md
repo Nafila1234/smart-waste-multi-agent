@@ -64,8 +64,7 @@ The system supports six waste categories:
 ### 3.2. Smart Waste Bin Sensor Simulation Dataset
 - **Source:** Kaggle
 - **Purpose:** Training and evaluating the Prediction Agent and supporting the Routing Agent.
-- **Link:** https://www.kaggle.com/datasets/ajithdari/smart-waste-iot-and-computer-vision-dataset
-
+- **Link:** /kaggle/input/datasets/ajithdari/smart-waste-iot-and-computer-vision-dataset
 ### 3.3. Dataset Integration Strategy
 
 The two datasets are independent and do not share a common structure or identifiers.
@@ -105,7 +104,7 @@ Each team member is responsible for one agent.
 | Team Member | Assigned Responsibility |
 |---|---|
 | Nafila DZIRI | Vision Agent (CNN) |
-| Hadil | Prediction Agent (Linear Regression) |
+| Hadil LAOUFI | Prediction Agent (Linear Regression) |
 | Samira HAMMOUCHE | Routing Agent (Decision Tree) |
 
 The coordinator and the demo app are assigned to: [name, to be decided].
