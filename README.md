@@ -64,7 +64,7 @@ The system supports six waste categories:
 ### 3.2. Smart Waste Bin Sensor Simulation Dataset
 - **Source:** Kaggle
 - **Purpose:** Training and evaluating the Prediction Agent and supporting the Routing Agent.
-- **Link:** [add link]
+- **Link:** https://www.kaggle.com/datasets/ajithdari/smart-waste-iot-and-computer-vision-dataset
 
 ### 3.3. Dataset Integration Strategy
 
