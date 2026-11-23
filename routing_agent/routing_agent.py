@@ -28,9 +28,7 @@ class RoutingAgent:
             "longitude": depot_longitude
         }
 
-    # ------------------------------------------
     # 1. Calculate distance using Haversine
-    # ------------------------------------------
 
     def calculate_distance(self, lat1, lon1, lat2, lon2):
 
@@ -59,9 +57,7 @@ class RoutingAgent:
 
         return earth_radius * c
 
-    # ------------------------------------------
     # 2. Normalize priority
-    # ------------------------------------------
 
     def get_priority(self, bin_data):
 
@@ -71,11 +67,8 @@ class RoutingAgent:
             return "LOW"
 
         return priority
-
-    # ------------------------------------------
     # 3. Generate initial route
     #    Priority + Nearest Neighbor
-    # ------------------------------------------
 
     def generate_initial_route(self, bins_to_collect):
 
@@ -121,10 +114,8 @@ class RoutingAgent:
 
         return route
 
-    # ------------------------------------------
     # 4. Calculate total route distance
     #    INCLUDING return to depot
-    # ------------------------------------------
 
     def calculate_route_distance(self, route):
 
@@ -160,9 +151,7 @@ class RoutingAgent:
 
         return total_distance
 
-    # ------------------------------------------
     # 5. Priority-Constrained 2-opt
-    # ------------------------------------------
 
     def optimize_route(self, route):
 
@@ -222,9 +211,7 @@ class RoutingAgent:
 
         return route, iterations
 
-    # ------------------------------------------
     # 6. Main route planning function
-    # ------------------------------------------
 
     def plan_route(self, decisions):
 
