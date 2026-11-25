@@ -1,7 +1,7 @@
 """
 Coordinator of the Smart Waste Collection multi-agent system.
 
-For every bin:
+For every bin :
     photo   -> VisualAdapter   -> waste type, confidence, hazard flag
     sensors -> PredictionAgent -> fill forecast, tree / regression signals
     both    -> DecisionAgent   -> priority and action
