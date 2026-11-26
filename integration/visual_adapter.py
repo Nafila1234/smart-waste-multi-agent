@@ -4,7 +4,7 @@ Adapter connecting the teammate's Visual Agent
 to our Decision Agent.
 """
 
-from visual_agent.visual_agent import load_model, predict_waste
+from visual_agent.vision_agent import load_model, predict_waste
 
 
 class VisualAdapter:
