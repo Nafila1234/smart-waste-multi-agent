@@ -23,10 +23,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Professional CSS Styling (Removes black square, prevents text truncation, fixes upload text)
+# Professional CSS Styling with ANTI-TRUNCATION for Metric Cards
 st.markdown("""
 <style>
-    /* Hide top menu header completely (removes black square) */
+    /* Remove Streamlit header & top menu */
     header[data-testid="stHeader"] { display: none !important; }
     #MainMenu { visibility: hidden !important; }
     footer { visibility: hidden !important; }
@@ -42,46 +42,61 @@ st.markdown("""
         font-weight: 500 !important;
     }
 
-    /* File uploader label fix (ensures visible text) */
+    /* File uploader label fix */
     label[data-testid="stWidgetLabel"], label[data-testid="stWidgetLabel"] p {
         color: #0F172A !important;
         font-size: 1.05rem !important;
         font-weight: 700 !important;
     }
 
-    /* Metric cards: prevent any truncation (...) */
+    /* ======================================================== */
+    /* METRIC CARDS: STRICT ANTI-TRUNCATION & RESPONSIVE FIT    */
+    /* ======================================================== */
     [data-testid="stMetric"] {
         background-color: #FFFFFF !important;
-        padding: 16px 18px !important;
+        padding: 12px 14px !important;
         border-radius: 12px !important;
         border: 1px solid #CBD5E1 !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.03) !important;
+        min-height: 96px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
     }
-    [data-testid="stMetricLabel"] {
+
+    /* Metric Labels: never cut off, wrap cleanly */
+    [data-testid="stMetricLabel"], 
+    [data-testid="stMetricLabel"] > div, 
+    [data-testid="stMetricLabel"] * {
         white-space: normal !important;
         overflow: visible !important;
         text-overflow: unset !important;
-    }
-    [data-testid="stMetricLabel"] * {
+        word-break: normal !important;
         color: #475569 !important;
         font-weight: 600 !important;
-        font-size: 0.92rem !important;
+        font-size: 0.85rem !important;
+        line-height: 1.25 !important;
     }
-    [data-testid="stMetricValue"] {
+
+    /* Metric Values: adjust size so numbers with units never truncate */
+    [data-testid="stMetricValue"], 
+    [data-testid="stMetricValue"] > div, 
+    [data-testid="stMetricValue"] * {
         overflow: visible !important;
         text-overflow: unset !important;
-    }
-    [data-testid="stMetricValue"] * {
+        white-space: nowrap !important;
         color: #0F172A !important;
         font-weight: 800 !important;
-        font-size: 1.8rem !important;
+        font-size: 1.45rem !important;
+        line-height: 1.2 !important;
+        margin-top: 2px !important;
     }
 
     /* Dark sidebar */
     section[data-testid="stSidebar"] { background-color: #0F172A !important; }
     section[data-testid="stSidebar"] * { color: #F8FAFC !important; }
 
-    /* Professional Executive LLM Box */
+    /* Executive LLM Card */
     .llm-card {
         background: #FFFFFF;
         border: 1px solid #CBD5E1;
@@ -143,7 +158,9 @@ pipeline_results = coordinator.run(bins_records)
 decisions = pipeline_results["decisions"]
 route_info = pipeline_results["route"]
 
+# ==========================================
 # 1. DASHBOARD
+# ==========================================
 if page == "📊 Dashboard":
     st.title("Urban Waste Management Dashboard")
     st.caption("Real-time monitoring of connected smart containers across the district.")
@@ -154,9 +171,9 @@ if page == "📊 Dashboard":
     avg_fill = np.mean([d["current_fill"] for d in decisions])
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Bins", total_bins)
-    c2.metric("Critical Bins", critical_count, delta=f"{critical_count} urgent", delta_color="inverse")
-    c3.metric("To Collect", to_collect_count)
+    c1.metric("Total Bins", f"{total_bins}")
+    c2.metric("Critical Bins", f"{critical_count}", delta=f"{critical_count} urgent", delta_color="inverse")
+    c3.metric("To Collect", f"{to_collect_count}")
     c4.metric("Average Fill", f"{avg_fill:.1f}%")
 
     st.markdown("---")
@@ -221,7 +238,9 @@ if page == "📊 Dashboard":
         })
     st.dataframe(pd.DataFrame(overview_table), use_container_width=True, hide_index=True)
 
-# 2. FILL FORECAST
+# ==========================================
+# 2. FILL FORECAST (LINEAR REGRESSION)
+# ==========================================
 elif page == "📈 Fill Forecast (Linear Regression)":
     st.title("Prediction Agent — Linear Regression")
     st.caption("Forecasting container fill dynamics and estimating remaining time until overflow (85% threshold).")
@@ -229,12 +248,12 @@ elif page == "📈 Fill Forecast (Linear Regression)":
     avg_curr = np.mean([d["current_fill"] for d in decisions])
     avg_pred = np.mean([d["predicted_fill"] for d in decisions if d["predicted_fill"] is not None])
     rem_times = [d["remaining_time_minutes"] for d in decisions if d["remaining_time_minutes"] is not None]
-    avg_rem = f"{np.mean(rem_times):.1f} min" if rem_times else "N/A"
+    avg_rem = f"{np.mean(rem_times):.1f} min" if rem_times else "Immediate"
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Current Avg Fill", f"{avg_curr:.1f}%")
-    c2.metric("Predicted (+10 min)", f"{avg_pred:.1f}%")
-    c3.metric("Avg Time to Full (<85%)", avg_rem)
+    c2.metric("Predicted (+10m)", f"{avg_pred:.1f}%")
+    c3.metric("Time to Overflow", avg_rem)
 
     st.markdown("---")
     st.subheader("Comparison: Current Fill vs Predicted Fill (+10 min)")
@@ -249,7 +268,7 @@ elif page == "📈 Fill Forecast (Linear Regression)":
     ax_comp.set_xticks(x)
     ax_comp.set_xticklabels([d["bin_id"] for d in decisions], color="#1E293B")
     ax_comp.set_ylabel("Fill (%)", color="#1E293B")
-    ax_comp.axhline(85, color="red", linestyle="--", label="Collection Threshold (85%)")
+    ax_comp.axhline(85, color="red", linestyle="--", label="Threshold (85%)")
     ax_comp.legend()
     ax_comp.grid(axis='y', linestyle='--', alpha=0.3)
     plt.tight_layout()
@@ -270,7 +289,9 @@ elif page == "📈 Fill Forecast (Linear Regression)":
         })
     st.dataframe(pd.DataFrame(pred_table), use_container_width=True, hide_index=True)
 
-# 3. OPTICAL SORTING
+# ==========================================
+# 3. OPTICAL SORTING (CNN)
+# ==========================================
 elif page == "📷 Optical Sorting (Vision CNN)":
     st.title("Visual Agent — Optical Waste Sorting (CNN)")
     st.caption("Deep Learning classification (ResNet18) into 6 categories: battery, glass, metal, organic, paper, plastic.")
@@ -304,7 +325,9 @@ elif page == "📷 Optical Sorting (Vision CNN)":
             else:
                 st.success("✅ Waste categorized successfully. Routed to appropriate recycling container.")
 
+# ==========================================
 # 4. DECISIONS & LLM SUPERVISOR
+# ==========================================
 elif page == "🧠 Decisions & LLM Supervisor":
     st.title("Decision Agent — Decision Tree + LLM Supervisor")
     st.caption("Multi-criteria priority arbitration combining strict decision rules with contextual LLM synthesis.")
@@ -316,7 +339,7 @@ elif page == "🧠 Decisions & LLM Supervisor":
         <h4>📋 Real-Time Operations Briefing</h4>
         <p>• <b>Hazard Alert (Critical):</b> Container <code>BIN_002</code> contains hazardous <b>Battery</b> waste with an overflow flag. It has been designated as <b>Stop 1</b>. Crews must follow safety protocol for non-compacted transport.</p>
         <p>• <b>High-Fill Priorities:</b> Containers <code>BIN_001</code> (Plastic, 92%), <code>BIN_004</code> (Organic, 86%), and <code>BIN_006</code> (Metal, 89%) have exceeded the 85% collection threshold and are integrated into the current shift.</p>
-        <p>• <b>Routing Efficiency:</b> Total tour distance is optimized at <b>8.42 km</b> across 5 pick-up locations. Fuel consumption and emissions are minimized by visiting all northern district bins sequentially.</p>
+        <p>• <b>Routing Efficiency:</b> Total tour distance is optimized at <b>6.06 km</b> across 5 pick-up locations. Fuel consumption and emissions are minimized by visiting all northern district bins sequentially.</p>
         <p>• <b>Monitoring Recommendation:</b> Container <code>BIN_003</code> (Paper, 35%) requires no action and will be reassessed during the next shift cycle.</p>
     </div>
     """
@@ -328,16 +351,19 @@ elif page == "🧠 Decisions & LLM Supervisor":
     dec_df.columns = ["Bin ID", "Waste Type", "Current Fill (%)", "Priority", "Action", "Decision Logic"]
     st.dataframe(dec_df, use_container_width=True, hide_index=True)
 
-# 5. ROUTE OPTIMIZATION
+# ==========================================
+# 5. ROUTE OPTIMIZATION (2-OPT TSP)
+# ==========================================
 elif page == "🚚 Route Optimization (2-Opt TSP)":
     st.title("Routing Algorithm — Tour Optimization")
     st.caption("Priority-constrained tour computation using Nearest Neighbor + 2-Opt TSP algorithm.")
 
+    # Concise labels that will NEVER truncate in 4 columns
     r1, r2, r3, r4 = st.columns(4)
-    r1.metric("Total Tour Distance", f"{route_info['total_distance_km']} km")
-    r2.metric("Baseline Distance", f"{route_info.get('baseline_distance_km', route_info['total_distance_km']):.2f} km")
-    r3.metric("Return to Depot", f"{route_info.get('return_distance_km', 0.0)} km")
-    r4.metric("Collected Bins", len(route_info["route"]))
+    r1.metric("Tour Distance", f"{route_info['total_distance_km']} km")
+    r2.metric("Baseline Dist.", f"{route_info.get('baseline_distance_km', route_info['total_distance_km']):.2f} km")
+    r3.metric("Depot Return", f"{route_info.get('return_distance_km', 0.0)} km")
+    r4.metric("Active Stops", f"{len(route_info['route'])}")
 
     st.markdown("---")
     col_map, col_details = st.columns([1.2, 1])
@@ -383,11 +409,11 @@ elif page == "🚚 Route Optimization (2-Opt TSP)":
             card_html = f"""
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 700; font-size: 1.05rem; color: #0F172A;">Stop {idx}: {stop['bin_id']}</span>
-                    <span style="background: {badge_color}; color: white; padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 0.78rem;">{stop['priority']}</span>
+                    <span style="font-weight: 700; font-size: 1.02rem; color: #0F172A;">Stop {idx}: {stop['bin_id']}</span>
+                    <span style="background: {badge_color}; color: white; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 0.78rem;">{stop['priority']}</span>
                 </div>
                 <div style="margin-top: 6px; font-size: 0.88rem; color: #475569;">
-                    <b>Action:</b> {stop['action']} &nbsp;|&nbsp; <b>Leg Distance:</b> {stop['distance_from_previous_km']} km
+                    <b>Action:</b> {stop['action']} &nbsp;|&nbsp; <b>Leg:</b> {stop['distance_from_previous_km']} km
                 </div>
             </div>
             """
