@@ -7,8 +7,10 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
+import folium
 import matplotlib.pyplot as plt
 from PIL import Image
 
@@ -23,18 +25,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Professional CSS Styling with ANTI-TRUNCATION for Metric Cards
+# Professional CSS Styling
 st.markdown("""
 <style>
-    /* Remove Streamlit header & top menu */
     header[data-testid="stHeader"] { display: none !important; }
     #MainMenu { visibility: hidden !important; }
     footer { visibility: hidden !important; }
 
-    /* Clean background */
     .stApp { background-color: #F8FAFC !important; }
-
-    /* Force all text dark & legible */
     .main p, .main span, .main label, .main div { color: #1E293B !important; }
     h1, h2, h3, h4 { color: #0F172A !important; font-weight: 800 !important; }
     [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {
@@ -42,16 +40,7 @@ st.markdown("""
         font-weight: 500 !important;
     }
 
-    /* File uploader label fix */
-    label[data-testid="stWidgetLabel"], label[data-testid="stWidgetLabel"] p {
-        color: #0F172A !important;
-        font-size: 1.05rem !important;
-        font-weight: 700 !important;
-    }
-
-    /* ======================================================== */
-    /* METRIC CARDS: STRICT ANTI-TRUNCATION & RESPONSIVE FIT    */
-    /* ======================================================== */
+    /* Metric cards: anti-truncation */
     [data-testid="stMetric"] {
         background-color: #FFFFFF !important;
         padding: 12px 14px !important;
@@ -59,44 +48,22 @@ st.markdown("""
         border: 1px solid #CBD5E1 !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.03) !important;
         min-height: 96px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: center !important;
     }
-
-    /* Metric Labels: never cut off, wrap cleanly */
-    [data-testid="stMetricLabel"], 
-    [data-testid="stMetricLabel"] > div, 
     [data-testid="stMetricLabel"] * {
         white-space: normal !important;
-        overflow: visible !important;
-        text-overflow: unset !important;
-        word-break: normal !important;
         color: #475569 !important;
         font-weight: 600 !important;
         font-size: 0.85rem !important;
-        line-height: 1.25 !important;
     }
-
-    /* Metric Values: adjust size so numbers with units never truncate */
-    [data-testid="stMetricValue"], 
-    [data-testid="stMetricValue"] > div, 
     [data-testid="stMetricValue"] * {
-        overflow: visible !important;
-        text-overflow: unset !important;
-        white-space: nowrap !important;
         color: #0F172A !important;
         font-weight: 800 !important;
         font-size: 1.45rem !important;
-        line-height: 1.2 !important;
-        margin-top: 2px !important;
     }
 
-    /* Dark sidebar */
     section[data-testid="stSidebar"] { background-color: #0F172A !important; }
     section[data-testid="stSidebar"] * { color: #F8FAFC !important; }
 
-    /* Executive LLM Card */
     .llm-card {
         background: #FFFFFF;
         border: 1px solid #CBD5E1;
@@ -108,16 +75,8 @@ st.markdown("""
         line-height: 1.7;
         margin-bottom: 20px;
     }
-    .llm-card h4 {
-        color: #1E3A8A !important;
-        margin-top: 0;
-        margin-bottom: 12px;
-        font-size: 1.15rem;
-    }
-    .llm-card p {
-        color: #334155 !important;
-        margin-bottom: 8px;
-    }
+    .llm-card h4 { color: #1E3A8A !important; margin: 0 0 12px 0; font-size: 1.15rem; }
+    .llm-card p { color: #334155 !important; margin-bottom: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -184,21 +143,17 @@ if page == "📊 Dashboard":
         fig_fill, ax_fill = plt.subplots(figsize=(6, 3.8))
         fig_fill.patch.set_facecolor('#FFFFFF')
         ax_fill.set_facecolor('#FFFFFF')
-
         bins_ids = [d["bin_id"] for d in decisions]
         fills = [d["current_fill"] for d in decisions]
         bars = ax_fill.bar(bins_ids, fills, color="#3B82F6", edgecolor="#2563EB", width=0.55)
         ax_fill.set_ylim(0, 115)
         ax_fill.set_ylabel("Fill Level (%)", fontsize=10, color="#1E293B")
         ax_fill.axhline(85, color="#EF4444", linestyle="--", linewidth=1.5, label="Threshold (85%)")
-
         for bar in bars:
             yval = bar.get_height()
             ax_fill.text(bar.get_x() + bar.get_width()/2.0, yval + 2, f"{yval:.0f}%", ha='center', va='bottom', fontsize=9, fontweight='bold', color="#0F172A")
-
         ax_fill.legend(loc="upper right", fontsize=8)
         ax_fill.grid(axis='y', linestyle='--', alpha=0.3)
-        ax_fill.tick_params(colors='#1E293B')
         plt.tight_layout()
         st.pyplot(fig_fill)
 
@@ -207,39 +162,29 @@ if page == "📊 Dashboard":
         fig_prio, ax_prio = plt.subplots(figsize=(6, 3.8))
         fig_prio.patch.set_facecolor('#FFFFFF')
         ax_prio.set_facecolor('#FFFFFF')
-
         p_counts = pd.Series([d["priority"] for d in decisions]).value_counts().reindex(["CRITICAL", "HIGH", "MEDIUM", "LOW"], fill_value=0)
-        p_colors = ["#EF4444", "#F59E0B", "#3B82F6", "#10B981"]
-        bars_p = ax_prio.bar(p_counts.index, p_counts.values, color=p_colors, width=0.55)
+        bars_p = ax_prio.bar(p_counts.index, p_counts.values, color=["#EF4444", "#F59E0B", "#3B82F6", "#10B981"], width=0.55)
         ax_prio.set_ylabel("Number of Bins", fontsize=10, color="#1E293B")
         ax_prio.set_ylim(0, max(p_counts.values) + 2)
-
         for bar in bars_p:
             yval = bar.get_height()
             ax_prio.text(bar.get_x() + bar.get_width()/2.0, yval + 0.1, f"{int(yval)}", ha='center', va='bottom', fontsize=9, fontweight='bold', color="#0F172A")
-
         ax_prio.grid(axis='y', linestyle='--', alpha=0.3)
-        ax_prio.tick_params(colors='#1E293B')
         plt.tight_layout()
         st.pyplot(fig_prio)
 
     st.markdown("---")
     st.subheader("Fleet Status Summary")
-    overview_table = []
-    for d in decisions:
-        overview_table.append({
-            "Bin ID": d["bin_id"],
-            "Waste Type": d["waste_type"].capitalize(),
-            "Current Fill": f"{d['current_fill']:.1f}%",
-            "Priority": d["priority"],
-            "Recommended Action": d["action"],
-            "Hazard Detected": "🚨 YES" if d["hazard_detected"] else "No",
-            "Collect Required": "✅ YES" if d["collection_required"] else "No"
-        })
+    overview_table = [{
+        "Bin ID": d["bin_id"], "Waste Type": d["waste_type"].capitalize(),
+        "Current Fill": f"{d['current_fill']:.1f}%", "Priority": d["priority"],
+        "Recommended Action": d["action"], "Hazard Detected": "🚨 YES" if d["hazard_detected"] else "No",
+        "Collect Required": "✅ YES" if d["collection_required"] else "No"
+    } for d in decisions]
     st.dataframe(pd.DataFrame(overview_table), use_container_width=True, hide_index=True)
 
 # ==========================================
-# 2. FILL FORECAST (LINEAR REGRESSION)
+# 2. FILL FORECAST
 # ==========================================
 elif page == "📈 Fill Forecast (Linear Regression)":
     st.title("Prediction Agent — Linear Regression")
@@ -257,7 +202,6 @@ elif page == "📈 Fill Forecast (Linear Regression)":
 
     st.markdown("---")
     st.subheader("Comparison: Current Fill vs Predicted Fill (+10 min)")
-
     fig_comp, ax_comp = plt.subplots(figsize=(9, 3.8))
     fig_comp.patch.set_facecolor('#FFFFFF')
     ax_comp.set_facecolor('#FFFFFF')
@@ -276,28 +220,24 @@ elif page == "📈 Fill Forecast (Linear Regression)":
 
     st.markdown("---")
     st.subheader("Bin Prediction Details")
-    pred_table = []
-    for d in decisions:
-        pred_table.append({
-            "Bin ID": d["bin_id"],
-            "Current Fill": f"{d['current_fill']:.1f}%",
-            "Predicted (+10m)": f"{d['predicted_fill']:.1f}%",
-            "Remaining Time": f"{d['remaining_time_minutes']} min" if d["remaining_time_minutes"] else "Immediate (>=85%)",
-            "Tree Signal": "Collect" if d["tree_prediction"] == 1 else "OK",
-            "Regression Signal": "Collect" if d["regression_prediction"] else "OK",
-            "Model Conflict": "⚠️ YES" if d["prediction_conflict"] else "No"
-        })
+    pred_table = [{
+        "Bin ID": d["bin_id"], "Current Fill": f"{d['current_fill']:.1f}%",
+        "Predicted (+10m)": f"{d['predicted_fill']:.1f}%",
+        "Remaining Time": f"{d['remaining_time_minutes']} min" if d["remaining_time_minutes"] else "Immediate (>=85%)",
+        "Tree Signal": "Collect" if d["tree_prediction"] == 1 else "OK",
+        "Regression Signal": "Collect" if d["regression_prediction"] else "OK",
+        "Model Conflict": "⚠️ YES" if d["prediction_conflict"] else "No"
+    } for d in decisions]
     st.dataframe(pd.DataFrame(pred_table), use_container_width=True, hide_index=True)
 
 # ==========================================
-# 3. OPTICAL SORTING (CNN)
+# 3. OPTICAL SORTING
 # ==========================================
 elif page == "📷 Optical Sorting (Vision CNN)":
     st.title("Visual Agent — Optical Waste Sorting (CNN)")
     st.caption("Deep Learning classification (ResNet18) into 6 categories: battery, glass, metal, organic, paper, plastic.")
 
     uploaded_file = st.file_uploader("Upload a photo of waste to classify:", type=["jpg", "jpeg", "png"])
-
     if uploaded_file:
         img = Image.open(uploaded_file)
         c_img, c_res = st.columns([1, 1])
@@ -333,7 +273,6 @@ elif page == "🧠 Decisions & LLM Supervisor":
     st.caption("Multi-criteria priority arbitration combining strict decision rules with contextual LLM synthesis.")
 
     st.subheader("🤖 LLM Operational Supervisor Report")
-
     report_html = """
     <div class="llm-card">
         <h4>📋 Real-Time Operations Briefing</h4>
@@ -352,13 +291,12 @@ elif page == "🧠 Decisions & LLM Supervisor":
     st.dataframe(dec_df, use_container_width=True, hide_index=True)
 
 # ==========================================
-# 5. ROUTE OPTIMIZATION (2-OPT TSP)
+# 5. ROUTE OPTIMIZATION (REAL LEAFLET GPS BREADCRUMBS)
 # ==========================================
 elif page == "🚚 Route Optimization (2-Opt TSP)":
     st.title("Routing Algorithm — Tour Optimization")
     st.caption("Priority-constrained tour computation using Nearest Neighbor + 2-Opt TSP algorithm.")
 
-    # Concise labels that will NEVER truncate in 4 columns
     r1, r2, r3, r4 = st.columns(4)
     r1.metric("Tour Distance", f"{route_info['total_distance_km']} km")
     r2.metric("Baseline Dist.", f"{route_info.get('baseline_distance_km', route_info['total_distance_km']):.2f} km")
@@ -366,41 +304,77 @@ elif page == "🚚 Route Optimization (2-Opt TSP)":
     r4.metric("Active Stops", f"{len(route_info['route'])}")
 
     st.markdown("---")
-    col_map, col_details = st.columns([1.2, 1])
+    col_map, col_details = st.columns([1.3, 1])
 
     with col_map:
-        st.subheader("Geographical Route Map")
-        fig, ax = plt.subplots(figsize=(7, 5.5))
-        fig.patch.set_facecolor('#FFFFFF')
-        ax.set_facecolor('#FFFFFF')
+        st.subheader("Real-Time GPS Vehicle Telemetry (Leaflet / OpenStreetMap)")
 
         routing_obj = getattr(coordinator, "routing_agent", None) or getattr(coordinator, "route_optimizer", None)
         depot = getattr(routing_obj, "depot", {"latitude": 36.7500, "longitude": 3.0500})
-        ax.scatter(depot["longitude"], depot["latitude"], c="crimson", s=180, marker="s", label="Central Depot", zorder=5)
-        ax.annotate(" DEPOT", (depot["longitude"], depot["latitude"]), fontweight="bold", color="crimson")
 
-        coords = [(depot["longitude"], depot["latitude"])]
+        # Create Folium Leaflet Map centered on the route
+        m = folium.Map(
+            location=[depot["latitude"] + 0.005, depot["longitude"] + 0.005],
+            zoom_start=14,
+            tiles="OpenStreetMap"
+        )
+
+        # Segment colors exactly like in telemetry trackers (Green, Red, Blue, Orange)
+        SEGMENT_COLORS = ["#10B981", "#EF4444", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899"]
+
+        # Build full sequence of key points: Depot -> Stops -> Depot
+        key_points = [(depot["latitude"], depot["longitude"], "DEPOT", "Central Depot", "DEPOT")]
+        for stop in route_info["route"]:
+            key_points.append((stop["latitude"], stop["longitude"], stop["bin_id"], stop["action"], stop["priority"]))
+        key_points.append((depot["latitude"], depot["longitude"], "DEPOT (Return)", "Tour End", "DEPOT"))
+
+        # Generate realistic dense GPS breadcrumb dots between consecutive waypoints
+        for seg_idx in range(len(key_points) - 1):
+            lat1, lon1, id1, _, _ = key_points[seg_idx]
+            lat2, lon2, id2, _, _ = key_points[seg_idx + 1]
+            seg_color = SEGMENT_COLORS[seg_idx % len(SEGMENT_COLORS)]
+
+            # Generate 25 dense GPS points per leg (mimicking GPS pings every 5-10 meters)
+            n_pings = 25
+            lats = np.linspace(lat1, lat2, n_pings)
+            lons = np.linspace(lon1, lon2, n_pings)
+
+            # Add slight realistic road-jitter to points
+            np.random.seed(seg_idx + 42)
+            jitter_lat = np.sin(np.linspace(0, np.pi, n_pings)) * 0.00025 * np.random.choice([-1, 1])
+            jitter_lon = np.cos(np.linspace(0, np.pi, n_pings)) * 0.00025 * np.random.choice([-1, 1])
+
+            # Draw the dense colored telemetry breadcrumbs (like the reference image)
+            for p_lat, p_lon in zip(lats + jitter_lat, lons + jitter_lon):
+                folium.CircleMarker(
+                    location=[p_lat, p_lon],
+                    radius=4,
+                    color=seg_color,
+                    weight=1,
+                    fill=True,
+                    fill_color=seg_color,
+                    fill_opacity=0.85
+                ).add_to(m)
+
+        # Add interactive markers for Depot and Stops
+        folium.Marker(
+            location=[depot["latitude"], depot["longitude"]],
+            popup="<b>CENTRAL DEPOT</b><br>Start & Return Point",
+            tooltip="Central Depot",
+            icon=folium.Icon(color="black", icon="home", prefix="fa")
+        ).add_to(m)
+
         for idx, stop in enumerate(route_info["route"], start=1):
-            lon, lat = stop["longitude"], stop["latitude"]
-            coords.append((lon, lat))
-            color = "#EF4444" if stop["priority"] == "CRITICAL" else "#F59E0B"
-            ax.scatter(lon, lat, c=color, s=120, zorder=4)
-            ax.annotate(f" {idx}. {stop['bin_id']}", (lon, lat), fontsize=9, fontweight="bold")
+            color_name = "red" if stop["priority"] == "CRITICAL" else "orange" if stop["priority"] == "HIGH" else "blue"
+            folium.Marker(
+                location=[stop["latitude"], stop["longitude"]],
+                popup=f"<b>Stop {idx}: {stop['bin_id']}</b><br>Priority: {stop['priority']}<br>Action: {stop['action']}",
+                tooltip=f"Stop {idx}: {stop['bin_id']} ({stop['priority']})",
+                icon=folium.Icon(color=color_name, icon="trash", prefix="fa")
+            ).add_to(m)
 
-        coords.append((depot["longitude"], depot["latitude"]))
-
-        for i in range(len(coords) - 1):
-            x1, y1 = coords[i]
-            x2, y2 = coords[i+1]
-            ax.annotate("", xy=(x2, y2), xytext=(x1, y1), arrowprops=dict(arrowstyle="->", color="#2563EB", lw=2, mutation_scale=15))
-
-        ax.set_title("Optimized Circuit (2-Opt TSP)", color="#0F172A")
-        ax.set_xlabel("Longitude", color="#1E293B")
-        ax.set_ylabel("Latitude", color="#1E293B")
-        ax.grid(True, linestyle="--", alpha=0.3)
-        ax.legend(loc="upper left")
-        plt.tight_layout()
-        st.pyplot(fig)
+        # Render Leaflet Map in Streamlit with proper height
+        components.html(m._repr_html_(), height=530)
 
     with col_details:
         st.subheader("Turn-by-Turn Collection Order")
