@@ -35,54 +35,62 @@ st.set_page_config(
 )
 
 # ==========================================
-# STYLES CSS PERSONNALISÉS
+# STYLES CSS PERSONNALISÉS (FIX CONTRASTE)
 # ==========================================
 st.markdown("""
 <style>
+    /* Fond de la page principale */
     .stApp {
-        background-color: #F8F9FA;
+        background-color: #F8FAFC !important;
     }
-    h1, h2, h3 {
-        color: #10243E;
-        font-weight: 700;
+
+    /* Forcer tous les textes de la zone principale en sombre */
+    .main, .main p, .main span, .main label, .main div {
+        color: #1E293B !important;
     }
+
+    /* Titres bien visibles */
+    h1, h2, h3, h4 {
+        color: #0F172A !important;
+        font-weight: 800 !important;
+    }
+
+    /* Cartes des métriques */
     [data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        padding: 16px 20px;
-        border-radius: 12px;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        background-color: #FFFFFF !important;
+        padding: 16px 20px !important;
+        border-radius: 12px !important;
+        border: 1px solid #CBD5E1 !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
     }
+    [data-testid="stMetricValue"] * {
+        color: #0F172A !important;
+        font-weight: 800 !important;
+    }
+    [data-testid="stMetricLabel"] * {
+        color: #475569 !important;
+        font-weight: 600 !important;
+    }
+
+    /* Barre latérale foncée avec texte blanc */
     section[data-testid="stSidebar"] {
-        background-color: #0F172A;
+        background-color: #0F172A !important;
     }
     section[data-testid="stSidebar"] * {
         color: #F8FAFC !important;
     }
-    .badge-critical {
-        background-color: #EF4444; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold;
-    }
-    .badge-high {
-        background-color: #F59E0B; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold;
-    }
-    .badge-medium {
-        background-color: #3B82F6; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold;
-    }
-    .badge-low {
-        background-color: #10B981; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold;
-    }
+
+    /* Boîte de recommandation LLM */
     .llm-box {
-        background-color: #FFFFFF;
-        border-left: 5px solid #6366F1;
-        padding: 18px;
-        border-radius: 8px;
-        border: 1px solid #E2E8F0;
-        margin-top: 15px;
-        margin-bottom: 20px;
+        background-color: #FFFFFF !important;
+        border-left: 5px solid #4F46E5 !important;
+        padding: 18px !important;
+        border-radius: 8px !important;
+        border: 1px solid #CBD5E1 !important;
+        color: #0F172A !important;
     }
 </style>
 """, unsafe_allow_html=True)
-
 
 # ==========================================
 # RESSOURCES EN CACHE
