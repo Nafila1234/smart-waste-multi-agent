@@ -2,7 +2,7 @@
 from prediction_agent.prediction_agent import PredictionAgent
 from visual_agent.vision_agent import load_model, predict_waste
 from decision_agent.llm_decision_agent import LLMDecisionAgent
-
+from routing_agent.routing_module import RoutingAgent
 from pathlib import Path
 
 
@@ -57,6 +57,49 @@ decision_result = decision_agent.evaluate_bin(
     visual_result,
     sensor_data
 )
+
+
+# ===== ROUTING MODULE =====
+
+print("\n ROUTING MODULE RESULTS \n")
+
+# Add geographical coordinates to the LLM decision
+decision_with_location = {
+    **decision_result,
+    "latitude": 36.7665,
+    "longitude": 3.4772
+}
+
+# Initialize routing module
+routing_module = RoutingAgent(
+    depot_latitude=36.7660,
+    depot_longitude=3.4720
+)
+
+print("Depot:", routing_module.depot)
+print("Bin coordinates:", decision_with_location["latitude"],
+      decision_with_location["longitude"])
+
+# Generate route using the actual LLM decision
+route_result = routing_module.plan_route(
+    [decision_with_location]
+)
+
+# Display route
+for index, stop in enumerate(route_result["route"], start=1):
+    print(f"\nStop {index}")
+    print(f"Bin: {stop['bin_id']}")
+    print(f"Priority: {stop['priority']}")
+    print(f"Action: {stop['action']}")
+    print(
+        f"Distance: "
+        f"{stop['distance_from_previous_km']} km"
+    )
+
+print("\n===== ROUTE SUMMARY =====")
+print(f"Total distance: {route_result['total_distance_km']} km")
+print(f"Return distance: {route_result['return_distance_km']} km")
+print(route_result["message"])
 
 # Display results
 print("\n===== PREDICTION AGENT =====")
