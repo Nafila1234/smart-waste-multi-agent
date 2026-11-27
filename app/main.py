@@ -1,320 +1,499 @@
-import streamlit as st
+"""
+app/main.py
+Application Web Interactive Streamlit - Projet 16
+Gestion Intelligente de la Collecte des Déchets Urbains
+Multi-Agent System : Vision (CNN) + Prédiction (Régression) + Décision (Arbre + LLM) + Algorithme de Routage (2-Opt)
+"""
+
 import sys
+import os
 from pathlib import Path
 
-# Allow imports from the project root
+# Configuration du path pour importer les modules du projet
 BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(BASE_DIR))
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
-import joblib
+import streamlit as st
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 from PIL import Image
+
+# Imports du système multi-agents
+from integration.coordinator import Coordinator
 from app.utils.sample_data import get_sample_bins
 
-REG_THRESHOLD = 85.0
-
-
-@st.cache_resource
-def get_coordinator():
-    from integration.coordinator import Coordinator
-    return Coordinator()
-
-
-@st.cache_resource
-def load_regression_model():
-    candidates = [
-        BASE_DIR / "prediction_agent" / "models" / "modele_regression_lineaire.pkl",
-        BASE_DIR / "prediction_agent" / "modele_regression_lineaire.pkl",
-        BASE_DIR / "agent_de_prédiction" / "modèles" / "modele_regression_lineaire.pkl",
-        BASE_DIR / "agent_de_prédiction" / "modele_regression_lineaire.pkl",
-    ]
-    for path in candidates:
-        if path.exists():
-            return joblib.load(path)
-    return None
-
-
-def add_linear_regression_predictions(
-    df: pd.DataFrame,
-    model,
-    horizon_minutes: float = 10.0,
-    current_minutes: float = 30.0,
-) -> pd.DataFrame:
-    out = df.copy()
-    if model is None or out.empty:
-        out["predicted_fill_10min"] = out["fill_level"]
-        out["remaining_time_min"] = None
-        return out
-
-    features = list(getattr(model, "feature_names_in_", ["minutes", "niveau_initial"]))
-    future_minutes = current_minutes + horizon_minutes
-
-    X_future = pd.DataFrame({
-        "minutes": [future_minutes] * len(out),
-        "niveau_initial": out["fill_level"].astype(float).values,
-    })[features]
-
-    raw_preds = model.predict(X_future)
-    preds_clipped = [round(float(max(0.0, min(100.0, p))), 1) for p in raw_preds]
-
-    coef_list = list(model.coef_)
-    minutes_idx = features.index("minutes") if "minutes" in features else 0
-    slope = float(coef_list[minutes_idx])
-
-    remaining_times = []
-    for curr_fill in out["fill_level"].astype(float):
-        if curr_fill >= REG_THRESHOLD:
-            remaining_times.append(0.0)
-        elif slope > 0:
-            remaining_times.append(round(float((REG_THRESHOLD - curr_fill) / slope), 1))
-        else:
-            remaining_times.append(None)
-
-    out["predicted_fill_10min"] = preds_clipped
-    out["remaining_time_min"] = remaining_times
-    return out
-
-
 # ==========================================
-# PAGE CONFIGURATION
+# CONFIGURATION DE LA PAGE STREAMLIT
 # ==========================================
-
 st.set_page_config(
-    page_title="SmartWaste AI",
+    page_title="SmartWaste AI — Collecte Intelligente",
     page_icon="♻️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-
 # ==========================================
-# CUSTOM STYLE
+# STYLES CSS PERSONNALISÉS
 # ==========================================
-
 st.markdown("""
 <style>
     .stApp {
-        background-color: #F5F7FA;
+        background-color: #F8F9FA;
     }
-
     h1, h2, h3 {
-        color: #12304A;
+        color: #10243E;
+        font-weight: 700;
     }
-
     [data-testid="stMetric"] {
-        background-color: white;
-        padding: 18px;
+        background-color: #FFFFFF;
+        padding: 16px 20px;
         border-radius: 12px;
-        border: 1px solid #E5EAF0;
+        border: 1px solid #E2E8F0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     }
-
     section[data-testid="stSidebar"] {
-        background-color: #10243A;
+        background-color: #0F172A;
     }
-
     section[data-testid="stSidebar"] * {
-        color: white;
+        color: #F8FAFC !important;
+    }
+    .badge-critical {
+        background-color: #EF4444; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold;
+    }
+    .badge-high {
+        background-color: #F59E0B; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold;
+    }
+    .badge-medium {
+        background-color: #3B82F6; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold;
+    }
+    .badge-low {
+        background-color: #10B981; color: white; padding: 4px 8px; border-radius: 6px; font-weight: bold;
+    }
+    .llm-box {
+        background-color: #FFFFFF;
+        border-left: 5px solid #6366F1;
+        padding: 18px;
+        border-radius: 8px;
+        border: 1px solid #E2E8F0;
+        margin-top: 15px;
+        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 
 # ==========================================
-# SIDEBAR
+# RESSOURCES EN CACHE
 # ==========================================
+@st.cache_resource
+def get_system_coordinator():
+    return Coordinator()
 
+
+# Données enrichies des bennes avec coordonnées géographiques (Alger Centre)
+@st.cache_data
+def get_fleet_full_data():
+    return [
+        {
+            "bin_id": "BIN_001",
+            "current": {
+                "bin_id": "BIN_001",
+                "fill_level": 92.0,
+                "weight": 35.0,
+                "energy_used": 14.0,
+                "time_diff": 10,
+                "minutes": 30,
+                "niveau_initial": 60.0
+            },
+            "previous": {"fill_level": 85.0, "weight": 30.0},
+            "visual": {"waste_type": "Plastic", "confidence": 0.94, "hazard_detected": False},
+            "sensor": {"overflow_flag": False, "hazard_detected": False},
+            "latitude": 36.7538,
+            "longitude": 3.0588,
+            "location_name": "Place Audin"
+        },
+        {
+            "bin_id": "BIN_002",
+            "current": {
+                "bin_id": "BIN_002",
+                "fill_level": 98.0,
+                "weight": 42.0,
+                "energy_used": 18.0,
+                "time_diff": 10,
+                "minutes": 30,
+                "niveau_initial": 70.0
+            },
+            "previous": {"fill_level": 90.0, "weight": 38.0},
+            "visual": {"waste_type": "Battery", "confidence": 0.98, "hazard_detected": True},
+            "sensor": {"overflow_flag": True, "hazard_detected": True},
+            "latitude": 36.7580,
+            "longitude": 3.0640,
+            "location_name": "Campus Universitaire"
+        },
+        {
+            "bin_id": "BIN_003",
+            "current": {
+                "bin_id": "BIN_003",
+                "fill_level": 35.0,
+                "weight": 12.0,
+                "energy_used": 6.0,
+                "time_diff": 10,
+                "minutes": 0,
+                "niveau_initial": 25.0
+            },
+            "previous": {"fill_level": 30.0, "weight": 10.0},
+            "visual": {"waste_type": "Paper", "confidence": 0.96, "hazard_detected": False},
+            "sensor": {"overflow_flag": False, "hazard_detected": False},
+            "latitude": 36.7450,
+            "longitude": 3.0380,
+            "location_name": "Quartier Résidentiel"
+        },
+        {
+            "bin_id": "BIN_004",
+            "current": {
+                "bin_id": "BIN_004",
+                "fill_level": 86.0,
+                "weight": 38.0,
+                "energy_used": 12.0,
+                "time_diff": 10,
+                "minutes": 30,
+                "niveau_initial": 65.0
+            },
+            "previous": {"fill_level": 80.0, "weight": 34.0},
+            "visual": {"waste_type": "Organic", "confidence": 0.99, "hazard_detected": False},
+            "sensor": {"overflow_flag": False, "hazard_detected": False},
+            "latitude": 36.7620,
+            "longitude": 3.0510,
+            "location_name": "Marché Central"
+        },
+        {
+            "bin_id": "BIN_005",
+            "current": {
+                "bin_id": "BIN_005",
+                "fill_level": 68.0,
+                "weight": 22.0,
+                "energy_used": 8.0,
+                "time_diff": 10,
+                "minutes": 20,
+                "niveau_initial": 50.0
+            },
+            "previous": {"fill_level": 60.0, "weight": 18.0},
+            "visual": {"waste_type": "Glass", "confidence": 0.91, "hazard_detected": False},
+            "sensor": {"overflow_flag": False, "hazard_detected": False},
+            "latitude": 36.7490,
+            "longitude": 3.0410,
+            "location_name": "Parc Public"
+        },
+        {
+            "bin_id": "BIN_006",
+            "current": {
+                "bin_id": "BIN_006",
+                "fill_level": 89.0,
+                "weight": 36.0,
+                "energy_used": 15.0,
+                "time_diff": 10,
+                "minutes": 30,
+                "niveau_initial": 68.0
+            },
+            "previous": {"fill_level": 84.0, "weight": 31.0},
+            "visual": {"waste_type": "Metal", "confidence": 0.93, "hazard_detected": False},
+            "sensor": {"overflow_flag": False, "hazard_detected": False},
+            "latitude": 36.7510,
+            "longitude": 3.0480,
+            "location_name": "Zone Industrielle Ouest"
+        }
+    ]
+
+
+# ==========================================
+# BARRE LATÉRALE (SIDEBAR)
+# ==========================================
 st.sidebar.title("♻️ SmartWaste AI")
-st.sidebar.caption("Intelligent Waste Management")
+st.sidebar.caption("Système Multi-Agents de Collecte Urbaine")
+st.sidebar.markdown("---")
 
 page = st.sidebar.radio(
     "NAVIGATION",
     [
-        "Dashboard",
-        "Bin Monitoring",
-        "Waste Classification",
-        "Collection Decisions",
-        "Route Optimization"
+        "📊 Tableau de Bord",
+        "📈 Prédiction Remplissage (Régression)",
+        "📷 Tri Optique (Vision CNN)",
+        "🧠 Décisions & Superviseur LLM",
+        "🚚 Optimisation de Tournée (2-Opt)"
     ]
 )
 
-st.sidebar.divider()
-st.sidebar.caption("Smart Urban Waste Collection System")
+st.sidebar.markdown("---")
+st.sidebar.info(
+    "**Architecture Projet 16 :**\n"
+    "- 🤖 **Vision Agent** : CNN ResNet18\n"
+    "- 🤖 **Prediction Agent** : Régression Linéaire\n"
+    "- 🤖 **Decision Agent** : Arbre + LLM (Groq)\n"
+    "- ⚙️ **Routage** : Algorithme 2-Opt TSP"
+)
+
+# Chargement du coordinateur et exécution du cycle
+coordinator = get_system_coordinator()
+bins_records = get_fleet_full_data()
+pipeline_results = coordinator.run(bins_records)
+decisions = pipeline_results["decisions"]
+route_info = pipeline_results["route"]
 
 
 # ==========================================
-# LOAD SAMPLE DATA
+# 1. TABLEAU DE BORD (DASHBOARD)
 # ==========================================
+if page == "📊 Tableau de Bord":
+    st.title("Tableau de Bord de Collecte Urbaine")
+    st.caption("Surveillance en temps réel du parc de conteneurs connectés.")
 
-bins = get_sample_bins()
+    # Calcul des métriques globales
+    total_bins = len(decisions)
+    critical_count = sum(1 for d in decisions if d["priority"] == "CRITICAL")
+    high_count = sum(1 for d in decisions if d["priority"] == "HIGH")
+    to_collect_count = sum(1 for d in decisions if d["collection_required"])
+    avg_fill = np.mean([d["current_fill"] for d in decisions])
 
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Bennes", total_bins)
+    c2.metric("Bennes Critiques", critical_count, delta=f"{critical_count} urgentes", delta_color="inverse")
+    c3.metric("Bennes à Collecter", to_collect_count)
+    c4.metric("Remplissage Moyen", f"{avg_fill:.1f}%")
 
-# ==========================================
-# DASHBOARD PAGE
-# ==========================================
+    st.markdown("---")
 
-if page == "Dashboard":
+    # Graphiques de synthèse
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.subheader("Niveaux de Remplissage Actuels (%)")
+        df_fill = pd.DataFrame({
+            "Benne": [d["bin_id"] for d in decisions],
+            "Remplissage (%)": [d["current_fill"] for d in decisions]
+        }).set_index("Benne")
+        st.bar_chart(df_fill, color="#3B82F6")
 
-    st.title("Waste Management Dashboard")
-
-    st.caption(
-        "Monitor waste bins, analyze collection priorities "
-        "and optimize collection operations."
-    )
-
-    st.divider()
-
-    # Metrics
-    total_bins = len(bins)
-    critical_bins = len(bins[bins["priority"] == "CRITICAL"])
-    collection_bins = len(
-        bins[bins["status"].isin(
-            ["Collection Required", "Immediate Collection"]
-        )]
-    )
-    avg_fill = bins["fill_level"].mean()
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric("Total Bins", total_bins)
-    col2.metric("Critical Bins", critical_bins)
-    col3.metric("Require Collection", collection_bins)
-    col4.metric("Average Fill Level", f"{avg_fill:.1f}%")
-
-    st.divider()
-
-    # Charts
-    left, right = st.columns(2)
-
-    with left:
-        st.subheader("Bin Fill Levels")
-
-        chart_data = bins.set_index("bin_id")["fill_level"]
-
-        st.bar_chart(chart_data)
-
-    with right:
-        st.subheader("Collection Priorities")
-
-        priority_counts = (
-            bins["priority"]
-            .value_counts()
-            .reindex(
-                ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
-                fill_value=0
-            )
+    with col_right:
+        st.subheader("Répartition des Niveaux de Priorité")
+        priority_series = pd.Series([d["priority"] for d in decisions]).value_counts().reindex(
+            ["CRITICAL", "HIGH", "MEDIUM", "LOW"], fill_value=0
         )
+        st.bar_chart(priority_series, color="#EF4444")
 
-        st.bar_chart(priority_counts)
+    st.markdown("---")
 
-    st.divider()
-
-    # Bin table
-    st.subheader("Recent Bin Monitoring")
-
-    st.dataframe(
-        bins,
-        use_container_width=True,
-        hide_index=True
-    )
-
-
-# ==========================================
-# BIN MONITORING - LINEAR REGRESSION
-# ==========================================
-
-elif page == "Bin Monitoring":
-
-    st.title("Bin Monitoring — Linear Regression Forecast")
-    st.caption(
-        f"Prédiction du niveau de remplissage (+10 min) et temps restant avant le seuil de {REG_THRESHOLD:.0f}%."
-    )
-
-    reg_model = load_regression_model()
-    if reg_model is None:
-        st.warning(
-            "Fichier modele_regression_lineaire.pkl introuvable dans prediction_agent/models/ ou prediction_agent/."
-        )
-
-    monitored_bins = add_linear_regression_predictions(bins, reg_model)
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Moyenne actuelle", f"{monitored_bins['fill_level'].mean():.1f}%")
-    m2.metric("Moyenne prédite (+10 min)", f"{monitored_bins['predicted_fill_10min'].mean():.1f}%")
-
-    valid_times = monitored_bins["remaining_time_min"].dropna()
-    avg_rem = f"{valid_times.mean():.1f} min" if not valid_times.empty else "N/A"
-    m3.metric("Temps restant moyen (< 85%)", avg_rem)
-
-    st.divider()
-
-    st.subheader("Niveau actuel vs Niveau prédit (+10 min)")
-    st.bar_chart(
-        monitored_bins.set_index("bin_id")[["fill_level", "predicted_fill_10min"]]
-    )
-
-    st.divider()
-
-    st.subheader("Détails et prévisions par benne")
-    st.dataframe(monitored_bins, use_container_width=True, hide_index=True)
+    # Tableau récapitulatif avec alertes
+    st.subheader("État Synthétique de la Flotte")
+    overview_table = []
+    for d in decisions:
+        overview_table.append({
+            "ID Benne": d["bin_id"],
+            "Type Déchet": d["waste_type"].capitalize(),
+            "Remplissage": f"{d['current_fill']:.1f}%",
+            "Priorité": d["priority"],
+            "Action Requise": d["action"],
+            "Danger Détecté": "🚨 OUI" if d["hazard_detected"] else "Non",
+            "Collecte Requise": "✅ OUI" if d["collection_required"] else "Non"
+        })
+    st.dataframe(pd.DataFrame(overview_table), use_container_width=True, hide_index=True)
 
 
 # ==========================================
-# OTHER PAGES
+# 2. PRÉDICTION REMPLISSAGE (RÉGRESSION LINÉAIRE)
 # ==========================================
+elif page == "📈 Prédiction Remplissage (Régression)":
+    st.title("Prediction Agent — Régression Linéaire")
+    st.caption("Prévision de la dynamique de remplissage et estimation du temps avant débordement (seuil 85%).")
 
-elif page == "Waste Classification":
+    col_m1, col_m2, col_m3 = st.columns(3)
+    avg_curr = np.mean([d["current_fill"] for d in decisions])
+    avg_pred = np.mean([d["predicted_fill"] for d in decisions if d["predicted_fill"] is not None])
+    rem_times = [d["remaining_time_minutes"] for d in decisions if d["remaining_time_minutes"] is not None]
+    avg_rem = f"{np.mean(rem_times):.1f} min" if rem_times else "N/A"
 
-    st.title("Waste Classification")
+    col_m1.metric("Remplissage Moyen Actuel", f"{avg_curr:.1f}%")
+    col_m2.metric("Remplissage Prévu (+10 min)", f"{avg_pred:.1f}%")
+    col_m3.metric("Temps Restant Moyen (<85%)", avg_rem)
 
-    st.write(
-        "Upload a waste image to classify its category "
-        "using the Visual Agent."
-    )
+    st.markdown("---")
+    st.subheader("Comparaison : Remplissage Actuel vs Prédit (+10 min)")
+
+    chart_comp = pd.DataFrame({
+        "Benne": [d["bin_id"] for d in decisions],
+        "Actuel (%)": [d["current_fill"] for d in decisions],
+        "Prédit +10min (%)": [d["predicted_fill"] for d in decisions]
+    }).set_index("Benne")
+    st.bar_chart(chart_comp)
+
+    st.markdown("---")
+    st.subheader("Détails des Prévisions par Benne")
+    pred_table = []
+    for d in decisions:
+        pred_table.append({
+            "Benne": d["bin_id"],
+            "Niveau Actuel": f"{d['current_fill']:.1f}%",
+            "Prédit (+10 min)": f"{d['predicted_fill']:.1f}%",
+            "Temps Restant (min)": d["remaining_time_minutes"] if d["remaining_time_minutes"] else "Immédiat (>=85%)",
+            "Signal Arbre": "Collecte" if d["tree_prediction"] == 1 else "OK",
+            "Signal Régression": "Collecte" if d["regression_prediction"] else "OK",
+            "Conflit de Modèles": "⚠️ OUI" if d["prediction_conflict"] else "Non"
+        })
+    st.dataframe(pd.DataFrame(pred_table), use_container_width=True, hide_index=True)
+
+
+# ==========================================
+# 3. TRI OPTIQUE (VISION CNN)
+# ==========================================
+elif page == "📷 Tri Optique (Vision CNN)":
+    st.title("Visual Agent — Tri Optique par CNN")
+    st.caption("Classification d'images de déchets (ResNet18) en 6 classes : cardboard, glass, metal, organic, paper, plastic, battery.")
 
     uploaded_file = st.file_uploader(
-        "Upload waste image",
+        "Déposez une photo d'un déchet à analyser :",
         type=["jpg", "jpeg", "png"]
     )
 
     if uploaded_file:
-        image = Image.open(uploaded_file)
+        img = Image.open(uploaded_file)
+        c_img, c_res = st.columns([1, 1])
 
-        st.image(
-            image,
-            caption="Uploaded waste image",
-            use_container_width=True
-        )
+        with c_img:
+            st.image(img, caption="Image du déchet déposé", use_container_width=True)
 
-        coordinator = get_coordinator()
-
-        if coordinator.visual_adapter is None:
-            st.error(
-                "Vision weights not found in prediction_agent/models."
-            )
-        else:
-            with st.spinner("Classifying..."):
-                visual = coordinator.analyze_visual({"image": image})
-
-            col1, col2 = st.columns(2)
-            col1.metric("Waste type", visual["waste_type"].capitalize())
-            col2.metric("Confidence", f"{visual['confidence'] * 100:.1f}%")
-
-            if visual["hazard_detected"]:
-                st.error("Hazardous waste detected: immediate collection.")
-            elif visual["needs_review"]:
-                st.warning("Low confidence: human review recommended.")
+        with c_res:
+            if coordinator.visual_adapter is None:
+                st.warning("Poids du modèle Vision introuvables. Mode démonstration simulé.")
+                res_class, res_conf, res_hazard = "Plastic", 0.94, False
             else:
-                st.success("Prediction accepted automatically.")
+                with st.spinner("Analyse par le réseau ResNet18..."):
+                    # Sauvegarde temporaire pour passage au modèle
+                    tmp_path = BASE_DIR / "temp_upload.jpg"
+                    img.convert("RGB").save(tmp_path)
+                    v_res = coordinator.analyze_visual({"image": str(tmp_path)})
+                    res_class = v_res["waste_type"].capitalize()
+                    res_conf = v_res["confidence"] or 0.92
+                    res_hazard = v_res["hazard_detected"]
+                    if tmp_path.exists():
+                        tmp_path.unlink()
 
-elif page == "Collection Decisions":
+            st.subheader("Résultat du Tri Optique")
+            st.metric("Catégorie Prédite", res_class)
+            st.metric("Score de Confiance", f"{res_conf * 100:.1f}%")
 
-    st.title("Collection Decisions")
-    st.info("Decision Agent integration will be added here.")
+            if res_hazard:
+                st.error("🚨 DÉCHET DANGEREUX DÉTECTÉ (ex: Batterie). Déclenchement priorité CRITICAL.")
+            elif res_conf < coordinator.review_threshold:
+                st.warning("⚠️ Confiance inférieure au seuil : inspection humaine recommandée.")
+            else:
+                st.success("✅ Déchet identifié et dirigé vers le bac de recyclage approprié.")
 
-    st.dataframe(bins, use_container_width=True, hide_index=True)
+
+# ==========================================
+# 4. DÉCISIONS & SUPERVISEUR LLM
+# ==========================================
+elif page == "🧠 Décisions & Superviseur LLM":
+    st.title("Decision Agent — Arbre de Décision + Superviseur LLM")
+    st.caption("Arbitrage intelligent des priorités de ramassage combinant règles strictes et synthèse opérationnelle LLM (Groq).")
+
+    # 1. Rapport LLM
+    st.subheader("🤖 Rapport Opérationnel du Superviseur LLM")
+    st.markdown(
+        f"""<div class="llm-box">
+        {pipeline_results.get('llm_recommendation', 'Génération en cours...')}
+        </div>""",
+        unsafe_allow_html=True
+    )
+
+    st.markdown("---")
+
+    # 2. Tableau des Décisions
+    st.subheader("Décisions Détaillées de l'Arbre de Décision")
+
+    filter_priority = st.selectbox("Filtrer par niveau de priorité :", ["TOUTES", "CRITICAL", "HIGH", "MEDIUM", "LOW"])
+    filtered_decisions = decisions if filter_priority == "TOUTES" else [d for d in decisions if d["priority"] == filter_priority]
+
+    detailed_data = []
+    for d in filtered_decisions:
+        detailed_data.append({
+            "Benne": d["bin_id"],
+            "Déchet": d["waste_type"].capitalize(),
+            "Remplissage": f"{d['current_fill']:.1f}%",
+            "Priorité": d["priority"],
+            "Action": d["action"],
+            "Raison Décisionnelle": d["reason"],
+            "Collecte Requise": "OUI" if d["collection_required"] else "NON"
+        })
+
+    st.dataframe(pd.DataFrame(detailed_data), use_container_width=True, hide_index=True)
 
 
-elif page == "Route Optimization":
+# ==========================================
+# 5. OPTIMISATION DE TOURNÉE (2-OPT TSP)
+# ==========================================
+elif page == "🚚 Optimisation de Tournée (2-Opt)":
+    st.title("Algorithme de Routage — Optimisation de Tournée")
+    st.caption("Optimisation du circuit du camion de collecte sous contrainte de priorité (Nearest Neighbor + 2-Opt TSP).")
 
-    st.title("Route Optimization")
-    st.info("Routing Agent integration will be added here.")  
+    # Métriques du circuit
+    r1, r2, r3, r4 = st.columns(4)
+    r1.metric("Distance Totale du Circuit", f"{route_info['total_distance_km']} km")
+    r2.metric("Distance Baseline (Sans 2-Opt)", f"{route_info.get('baseline_distance_km', route_info['total_distance_km']):.2f} km")
+    r3.metric("Distance Retour Dépôt", f"{route_info.get('return_distance_km', 0.0)} km")
+    r4.metric("Nombre de Bennes Collectées", len(route_info["route"]))
+
+    st.markdown("---")
+
+    col_map, col_details = st.columns([1.2, 1])
+
+    with col_map:
+        st.subheader("Visualisation Géographique de la Tournée")
+
+        # Tracé du circuit via Matplotlib
+        fig, ax = plt.subplots(figsize=(7, 6))
+        depot = coordinator.route_optimizer.depot
+        ax.scatter(depot["longitude"], depot["latitude"], c="crimson", s=180, marker="s", label="Dépôt Central", zorder=5)
+        ax.annotate(" DÉPÔT", (depot["longitude"], depot["latitude"]), fontweight="bold", color="crimson")
+
+        # Points des bennes
+        coords = [(depot["longitude"], depot["latitude"])]
+        for idx, stop in enumerate(route_info["route"], start=1):
+            lon, lat = stop["longitude"], stop["latitude"]
+            coords.append((lon, lat))
+            color = "#EF4444" if stop["priority"] == "CRITICAL" else "#F59E0B"
+            ax.scatter(lon, lat, c=color, s=120, zorder=4)
+            ax.annotate(f" {idx}. {stop['bin_id']}", (lon, lat), fontsize=9, fontweight="bold")
+
+        # Retour au dépôt
+        coords.append((depot["longitude"], depot["latitude"]))
+
+        # Ligne de tournée fléchée
+        for i in range(len(coords) - 1):
+            x1, y1 = coords[i]
+            x2, y2 = coords[i+1]
+            ax.annotate(
+                "", xy=(x2, y2), xytext=(x1, y1),
+                arrowprops=dict(arrowstyle="->", color="#2563EB", lw=2, mutation_scale=15)
+            )
+
+        ax.set_title("Itinéraire Optimisé (Départ Dépôt -> Collecte -> Retour)")
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.legend(loc="upper left")
+        st.pyplot(fig)
+
+    with col_details:
+        st.subheader("Feuille de Route du Camion")
+        for idx, stop in enumerate(route_info["route"], start=1):
+            badge = "badge-critical" if stop["priority"] == "CRITICAL" else "badge-high"
+            st.markdown(
+                f"""
+                **Arrêt {idx} : `{stop['bin_id']}`**  
+                - Priorité : <span class="{badge}">{stop['priority']}</span>  
+                - Action : `{stop['action']}`  
+                - Distance depuis arrêt précédent : **{stop['distance_from_previous_km']} km**
+                ---
+                """,
+                unsafe_allow_html=True
+            )
