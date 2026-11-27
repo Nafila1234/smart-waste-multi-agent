@@ -8,7 +8,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from app.utils.sample_data import get_sample_bins
+from PIL import Image
 
+
+@st.cache_resource
+def get_coordinator():
+    from integration.coordinator import Coordinator
+    return Coordinator()
 
 # ==========================================
 # PAGE CONFIGURATION
@@ -180,17 +186,34 @@ elif page == "Waste Classification":
     )
 
     if uploaded_file:
+        image = Image.open(uploaded_file)
+
         st.image(
-            uploaded_file,
+            image,
             caption="Uploaded waste image",
             use_container_width=True
         )
 
-        st.warning(
-            "CNN checkpoint is not connected yet. "
-            "Real classification will be enabled when the model weights arrive."
-        )
+        coordinator = get_coordinator()
 
+        if coordinator.visual_adapter is None:
+            st.error(
+                "Vision weights not found in prediction_agent/models."
+            )
+        else:
+            with st.spinner("Classifying..."):
+                visual = coordinator.analyze_visual({"image": image})
+
+            col1, col2 = st.columns(2)
+            col1.metric("Waste type", visual["waste_type"].capitalize())
+            col2.metric("Confidence", f"{visual['confidence'] * 100:.1f}%")
+
+            if visual["hazard_detected"]:
+                st.error("Hazardous waste detected: immediate collection.")
+            elif visual["needs_review"]:
+                st.warning("Low confidence: human review recommended.")
+            else:
+                st.success("Prediction accepted automatically.")
 
 elif page == "Collection Decisions":
 
