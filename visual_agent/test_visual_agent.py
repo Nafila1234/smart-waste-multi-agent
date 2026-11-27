@@ -13,7 +13,7 @@ weights_path = (
 )
 
 # Replace this with the path to an actual waste image
-image_path = project_root / "test_images" / "glass.jpg"
+image_path = project_root / "test_images" /"glass.jpg"
 
 # Load trained CNN
 model = load_model(str(weights_path))
