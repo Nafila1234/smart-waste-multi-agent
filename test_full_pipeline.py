@@ -1,6 +1,6 @@
 from prediction_agent.prediction_agent import PredictionAgent
 from decision_agent.decision_agent import DecisionAgent
-from routing_agent.routing_agent import RoutingAgent
+from routing_agent.routing_module import RoutingAgent
 
 # 1. INITIALIZE THE AGENTS
 

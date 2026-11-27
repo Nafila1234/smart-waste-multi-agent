@@ -1,4 +1,4 @@
-from routing_agent.routing_agent import RoutingAgent
+from routing_agent.routing_module import RoutingAgent
 
 
 # Simulated depot location

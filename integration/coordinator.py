@@ -62,7 +62,7 @@ class Coordinator:
             decision_agent = DecisionAgent()
 
         if routing_agent is None:
-            from routing_agent.routing_agent import RoutingAgent
+            from routing_agent.routing_module import RoutingAgent
             routing_agent = RoutingAgent(depot_latitude, depot_longitude)
 
         # The vision agent is optional: without weights, bins must bring

@@ -6,15 +6,16 @@ class DecisionAgent:
 
     def evaluate_bin(self, prediction, visual, sensor):
 
-        # 1. Collect information
+        # 1. Collect information from the three sources
         bin_id = prediction.get("bin_id")
 
         current_fill = prediction.get(
-            "current_fill",
-            prediction.get("fill_level", 0)
+            "current_fill", 0
         )
 
-        predicted_fill = prediction.get("predicted_fill_10min")
+        predicted_fill = prediction.get(
+            "predicted_fill_10min"
+        )
 
         tree_prediction = prediction.get(
             "tree_collection_prediction", 0
@@ -28,9 +29,12 @@ class DecisionAgent:
             "prediction_conflict", False
         )
 
+        # Visual Agent information
         waste_type = visual.get("waste_type", "Unknown")
+        visual_confidence = visual.get("confidence", 0)
 
-        hazard_detected = visual.get("hazard_detected", False)
+        # Sensor information
+        hazard_detected = sensor.get("hazard_detected", False)
         overflow_detected = sensor.get("overflow_flag", False)
 
         # 2. Initialize decision
@@ -41,10 +45,11 @@ class DecisionAgent:
 
         # 3. Apply decision rules
 
+        # Critical safety conditions
         if hazard_detected:
             collection_required = True
             priority = "CRITICAL"
-            reason = "Hazardous waste detected."
+            reason = "Hazardous waste detected by sensor."
             action = "IMMEDIATE_COLLECTION"
 
         elif overflow_detected:
@@ -53,36 +58,41 @@ class DecisionAgent:
             reason = "Bin overflow detected."
             action = "IMMEDIATE_COLLECTION"
 
+        # Current fill threshold
         elif current_fill >= FILL_THRESHOLD:
             collection_required = True
             priority = "HIGH"
-            reason = "Current fill level exceeds the threshold."
+            reason = "Current fill level reached the collection threshold."
             action = "COLLECT"
 
+        # Both prediction signals indicate collection
         elif tree_prediction == 1 and regression_prediction:
             collection_required = True
             priority = "HIGH"
-            reason = "Both models predict collection is required."
+            reason = "Decision Tree and Linear Regression indicate collection."
             action = "SCHEDULE_COLLECTION"
 
+        # Decision Tree indicates collection
         elif tree_prediction == 1:
             collection_required = True
             priority = "MEDIUM"
             reason = "Decision Tree predicts collection is required."
             action = "SCHEDULE_COLLECTION"
 
+        # Linear Regression indicates future collection
         elif regression_prediction:
             collection_required = True
             priority = "MEDIUM"
-            reason = "Linear Regression predicts the bin will reach the threshold."
+            reason = "Predicted fill level will reach the collection threshold."
             action = "SCHEDULE_COLLECTION"
 
-        # 4. Generate final result
+        # 4. Return final decision
         return {
             "bin_id": bin_id,
             "current_fill": current_fill,
             "predicted_fill": predicted_fill,
             "waste_type": waste_type,
+            "visual_confidence": visual_confidence,
             "hazard_detected": hazard_detected,
             "overflow_detected": overflow_detected,
             "collection_required": collection_required,

@@ -1,71 +1,49 @@
+
 from decision_agent.decision_agent import DecisionAgent
-agent = DecisionAgent()
+from prediction_agent.prediction_agent import PredictionAgent
 
-test_cases = [
-    {
-        "name": "Normal bin",
-        "prediction": {
-            "bin_id": "BIN_002",
-            "current_fill": 40,
-            "predicted_fill": 55
-        },
-        "visual": {
-            "waste_type": "paper",
-            "hazard_detected": False
-        },
-        "sensor": {"overflow_flag": False}
-    },
-    {
-        "name": "Full bin",
-        "prediction": {
-            "bin_id": "BIN_003",
-            "current_fill": 90,
-            "predicted_fill": 95
-        },
-        "visual": {
-            "waste_type": "plastic",
-            "hazard_detected": False
-        },
-        "sensor": {"overflow_flag": False}
-    },
-    {
-        "name": "Hazardous waste",
-        "prediction": {
-            "bin_id": "BIN_004",
-            "current_fill": 30,
-            "predicted_fill": 40
-        },
-        "visual": {
-            "waste_type": "hazardous",
-            "hazard_detected": True
-        },
-        "sensor": {"overflow_flag": False}
-    },
-    {
-        "name": "Overflow",
-        "prediction": {
-            "bin_id": "BIN_005",
-            "current_fill": 70,
-            "predicted_fill": 80
-        },
-        "visual": {
-            "waste_type": "organic",
-            "hazard_detected": False
-        },
-        "sensor": {"overflow_flag": True}
-    }
-]
 
-for test in test_cases:
-    result = agent.evaluate_bin(
-        test["prediction"],
-        test["visual"],
-        test["sensor"]
-    )
+# Initialize agents
+prediction_agent = PredictionAgent()
+decision_agent = DecisionAgent()
 
-    print("\n---", test["name"], "---")
-    print("Bin:", result["bin_id"])
-    print("Collection:", result["collection_required"])
-    print("Priority:", result["priority"])
-    print("Action:", result["action"])
-    print("Reason:", result["reason"])
+
+# Example bin information
+current_data = {
+    "bin_id": "BIN_001",
+    "fill_level": 78.0,
+    "minutes": 30,
+    "niveau_initial": 60.0
+}
+
+# Sensor information (simulated for this test)
+sensor_data = {
+    "overflow_flag": False,
+    "hazard_detected": False
+}
+
+# Visual information (simulated for this test)
+visual_data = {
+    "waste_type": "glass",
+    "confidence": 0.89
+}
+
+
+# Run Prediction Agent
+prediction_result = prediction_agent.predict_bin(current_data)
+
+print("\n===== PREDICTION AGENT =====")
+print(prediction_result)
+
+
+# Run Decision Agent
+decision_result = decision_agent.evaluate_bin(
+    prediction_result,
+    visual_data,
+    sensor_data
+)
+
+print("\n===== DECISION AGENT =====")
+
+for key, value in decision_result.items():
+    print(f"{key}: {value}")

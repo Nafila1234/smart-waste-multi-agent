@@ -3,7 +3,7 @@ import random
 import time
 import statistics
 
-from routing_agent.routing_agent import RoutingAgent
+from routing_agent.routing_module import RoutingAgent
 
 
 # ==================================================
