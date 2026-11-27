@@ -1,4 +1,3 @@
-
 import streamlit as st
 import sys
 from pathlib import Path
@@ -7,14 +6,74 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-from app.utils.sample_data import get_sample_bins
+import joblib
+import pandas as pd
 from PIL import Image
+from app.utils.sample_data import get_sample_bins
+
+REG_THRESHOLD = 85.0
 
 
 @st.cache_resource
 def get_coordinator():
     from integration.coordinator import Coordinator
     return Coordinator()
+
+
+@st.cache_resource
+def load_regression_model():
+    candidates = [
+        BASE_DIR / "prediction_agent" / "models" / "modele_regression_lineaire.pkl",
+        BASE_DIR / "prediction_agent" / "modele_regression_lineaire.pkl",
+        BASE_DIR / "agent_de_prédiction" / "modèles" / "modele_regression_lineaire.pkl",
+        BASE_DIR / "agent_de_prédiction" / "modele_regression_lineaire.pkl",
+    ]
+    for path in candidates:
+        if path.exists():
+            return joblib.load(path)
+    return None
+
+
+def add_linear_regression_predictions(
+    df: pd.DataFrame,
+    model,
+    horizon_minutes: float = 10.0,
+    current_minutes: float = 30.0,
+) -> pd.DataFrame:
+    out = df.copy()
+    if model is None or out.empty:
+        out["predicted_fill_10min"] = out["fill_level"]
+        out["remaining_time_min"] = None
+        return out
+
+    features = list(getattr(model, "feature_names_in_", ["minutes", "niveau_initial"]))
+    future_minutes = current_minutes + horizon_minutes
+
+    X_future = pd.DataFrame({
+        "minutes": [future_minutes] * len(out),
+        "niveau_initial": out["fill_level"].astype(float).values,
+    })[features]
+
+    raw_preds = model.predict(X_future)
+    preds_clipped = [round(float(max(0.0, min(100.0, p))), 1) for p in raw_preds]
+
+    coef_list = list(model.coef_)
+    minutes_idx = features.index("minutes") if "minutes" in features else 0
+    slope = float(coef_list[minutes_idx])
+
+    remaining_times = []
+    for curr_fill in out["fill_level"].astype(float):
+        if curr_fill >= REG_THRESHOLD:
+            remaining_times.append(0.0)
+        elif slope > 0:
+            remaining_times.append(round(float((REG_THRESHOLD - curr_fill) / slope), 1))
+        else:
+            remaining_times.append(None)
+
+    out["predicted_fill_10min"] = preds_clipped
+    out["remaining_time_min"] = remaining_times
+    return out
+
 
 # ==========================================
 # PAGE CONFIGURATION
@@ -160,16 +219,48 @@ if page == "Dashboard":
 
 
 # ==========================================
-# OTHER PAGES - TEMPORARY PLACEHOLDERS
+# BIN MONITORING - LINEAR REGRESSION
 # ==========================================
 
 elif page == "Bin Monitoring":
 
-    st.title("Bin Monitoring")
-    st.info("Prediction Agent integration will be added here.")
+    st.title("Bin Monitoring — Linear Regression Forecast")
+    st.caption(
+        f"Prédiction du niveau de remplissage (+10 min) et temps restant avant le seuil de {REG_THRESHOLD:.0f}%."
+    )
 
-    st.dataframe(bins, use_container_width=True, hide_index=True)
+    reg_model = load_regression_model()
+    if reg_model is None:
+        st.warning(
+            "Fichier modele_regression_lineaire.pkl introuvable dans prediction_agent/models/ ou prediction_agent/."
+        )
 
+    monitored_bins = add_linear_regression_predictions(bins, reg_model)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Moyenne actuelle", f"{monitored_bins['fill_level'].mean():.1f}%")
+    m2.metric("Moyenne prédite (+10 min)", f"{monitored_bins['predicted_fill_10min'].mean():.1f}%")
+
+    valid_times = monitored_bins["remaining_time_min"].dropna()
+    avg_rem = f"{valid_times.mean():.1f} min" if not valid_times.empty else "N/A"
+    m3.metric("Temps restant moyen (< 85%)", avg_rem)
+
+    st.divider()
+
+    st.subheader("Niveau actuel vs Niveau prédit (+10 min)")
+    st.bar_chart(
+        monitored_bins.set_index("bin_id")[["fill_level", "predicted_fill_10min"]]
+    )
+
+    st.divider()
+
+    st.subheader("Détails et prévisions par benne")
+    st.dataframe(monitored_bins, use_container_width=True, hide_index=True)
+
+
+# ==========================================
+# OTHER PAGES
+# ==========================================
 
 elif page == "Waste Classification":
 
