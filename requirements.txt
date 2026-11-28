@@ -1,0 +1,12 @@
+streamlit
+folium
+groq
+python-dotenv
+joblib
+scikit-learn
+pandas
+numpy
+matplotlib
+Pillow
+torch
+torchvision
