@@ -1,6 +1,7 @@
 import sys
 import os
 from pathlib import Path
+import joblib
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
@@ -83,6 +84,16 @@ st.markdown("""
 @st.cache_resource
 def get_system_coordinator():
     return Coordinator()
+
+@st.cache_resource
+def get_regression_slope():
+    """Vitesse de remplissage (points/minute) apprise par la régression linéaire."""
+    try:
+        model = joblib.load(BASE_DIR / "prediction_agent" / "models" / "modele_regression_lineaire.pkl")
+        idx = list(model.feature_names_in_).index("minutes")
+        return float(model.coef_[idx])
+    except Exception:
+        return 2.12  
 
 @st.cache_data
 def get_fleet_full_data():
