@@ -187,43 +187,107 @@ if page == "📊 Dashboard":
 # 2. FILL FORECAST
 # ==========================================
 elif page == "📈 Fill Forecast (Linear Regression)":
+    THRESHOLD = 85
+    slope = get_regression_slope()
+
     st.title("Prediction Agent — Linear Regression")
-    st.caption("Forecasting container fill dynamics and estimating remaining time until overflow (85% threshold).")
+    st.caption(
+        f"Fill-level forecast and time remaining before the {THRESHOLD}% collection threshold. "
+        f"Learned filling speed: {slope:.2f} points/min."
+    )
 
-    avg_curr = np.mean([d["current_fill"] for d in decisions])
-    avg_pred = np.mean([d["predicted_fill"] for d in decisions if d["predicted_fill"] is not None])
-    rem_times = [d["remaining_time_minutes"] for d in decisions if d["remaining_time_minutes"] is not None]
-    avg_rem = f"{np.mean(rem_times):.1f} min" if rem_times else "Immediate"
+    curr_levels = [d["current_fill"] for d in decisions]
+    pred_levels = [d["predicted_fill"] for d in decisions if d["predicted_fill"] is not None]
+    # Temps restant moyen uniquement pour les bennes encore sous le seuil
+    # (les bennes déjà >= 85 % valent 0 et fausseraient la moyenne)
+    times_below = [
+        d["remaining_time_minutes"] for d in decisions
+        if d["remaining_time_minutes"] is not None and d["current_fill"] < THRESHOLD
+    ]
+    already_full = sum(1 for v in curr_levels if v >= THRESHOLD)
 
-    c1, c2, c3 = st.columns(3)
+    avg_curr = np.mean(curr_levels)
+    avg_pred = np.mean(pred_levels) if pred_levels else 0.0
+    avg_rem = f"{np.mean(times_below):.1f} min" if times_below else "—"
+
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Current Avg Fill", f"{avg_curr:.1f}%")
-    c2.metric("Predicted (+10m)", f"{avg_pred:.1f}%")
-    c3.metric("Time to Overflow", avg_rem)
+    c2.metric("Predicted Avg (+10m)", f"{avg_pred:.1f}%")
+    c3.metric(f"Avg Time to {THRESHOLD}%", avg_rem, help="Average over bins still below the threshold.")
+    c4.metric(f"Bins already ≥ {THRESHOLD}%", f"{already_full} / {len(decisions)}")
+
+    st.caption(
+        "Predicted fill = initial level + speed × (elapsed minutes + 10), capped at 100%. "
+        "The model is trained on simulated data (30 minutes of measurements): "
+        "remaining times are extrapolations."
+    )
 
     st.markdown("---")
-    st.subheader("Comparison: Current Fill vs Predicted Fill (+10 min)")
-    fig_comp, ax_comp = plt.subplots(figsize=(9, 3.8))
-    fig_comp.patch.set_facecolor('#FFFFFF')
-    ax_comp.set_facecolor('#FFFFFF')
-    x = np.arange(len(decisions))
-    w = 0.35
-    ax_comp.bar(x - w/2, [d["current_fill"] for d in decisions], w, label='Current (%)', color='#3B82F6')
-    ax_comp.bar(x + w/2, [d["predicted_fill"] for d in decisions], w, label='Predicted +10m (%)', color='#F59E0B')
-    ax_comp.set_xticks(x)
-    ax_comp.set_xticklabels([d["bin_id"] for d in decisions], color="#1E293B")
-    ax_comp.set_ylabel("Fill (%)", color="#1E293B")
-    ax_comp.axhline(85, color="red", linestyle="--", label="Threshold (85%)")
-    ax_comp.legend()
-    ax_comp.grid(axis='y', linestyle='--', alpha=0.3)
-    plt.tight_layout()
-    st.pyplot(fig_comp)
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        st.subheader("Current vs Predicted Fill (+10 min)")
+        fig_comp, ax_comp = plt.subplots(figsize=(6.5, 4))
+        fig_comp.patch.set_facecolor('#FFFFFF')
+        ax_comp.set_facecolor('#FFFFFF')
+        x = np.arange(len(decisions))
+        w = 0.35
+        cur_vals = [d["current_fill"] for d in decisions]
+        pred_vals = [
+            float(d["predicted_fill"]) if d["predicted_fill"] is not None else np.nan
+            for d in decisions
+        ]
+        bars_c = ax_comp.bar(x - w/2, cur_vals, w, label="Current (%)", color="#3B82F6")
+        bars_p = ax_comp.bar(x + w/2, pred_vals, w, label="Predicted +10m (%)", color="#F59E0B")
+        for bar in list(bars_c) + list(bars_p):
+            h = bar.get_height()
+            if not np.isnan(h):
+                ax_comp.text(bar.get_x() + bar.get_width()/2, h + 1.5, f"{h:.0f}",
+                             ha="center", va="bottom", fontsize=8, color="#0F172A")
+        ax_comp.set_xticks(x)
+        ax_comp.set_xticklabels([d["bin_id"] for d in decisions], rotation=30, color="#1E293B")
+        ax_comp.set_ylim(0, 115)
+        ax_comp.set_ylabel("Fill (%)", color="#1E293B")
+        ax_comp.axhline(THRESHOLD, color="red", linestyle="--", label=f"Threshold ({THRESHOLD}%)")
+        ax_comp.legend(fontsize=8, loc="upper right")
+        ax_comp.grid(axis="y", linestyle="--", alpha=0.3)
+        plt.tight_layout()
+        st.pyplot(fig_comp)
+
+    with col_b:
+        st.subheader("Projected Fill — next 30 minutes")
+        fig_proj, ax_proj = plt.subplots(figsize=(6.5, 4))
+        fig_proj.patch.set_facecolor('#FFFFFF')
+        ax_proj.set_facecolor('#FFFFFF')
+        t = np.linspace(0, 30, 31)
+        for d in decisions:
+            line = np.minimum(100, d["current_fill"] + slope * t)
+            ax_proj.plot(t, line, linewidth=1.8, label=d["bin_id"])
+        ax_proj.axhline(THRESHOLD, color="red", linestyle="--", linewidth=1.3)
+        ax_proj.set_xlabel("Minutes from now", color="#1E293B")
+        ax_proj.set_ylabel("Fill (%)", color="#1E293B")
+        ax_proj.set_ylim(0, 105)
+        ax_proj.legend(fontsize=7, ncol=2, loc="lower right")
+        ax_proj.grid(linestyle="--", alpha=0.3)
+        plt.tight_layout()
+        st.pyplot(fig_proj)
 
     st.markdown("---")
     st.subheader("Bin Prediction Details")
+
+    def format_remaining(d):
+        r = d["remaining_time_minutes"]
+        if r is None:
+            return "Not filling"
+        if d["current_fill"] >= THRESHOLD or r <= 0:
+            return f"Already ≥ {THRESHOLD}%"
+        return f"{r:.1f} min"
+
     pred_table = [{
-        "Bin ID": d["bin_id"], "Current Fill": f"{d['current_fill']:.1f}%",
-        "Predicted (+10m)": f"{d['predicted_fill']:.1f}%",
-        "Remaining Time": f"{d['remaining_time_minutes']} min" if d["remaining_time_minutes"] else "Immediate (>=85%)",
+        "Bin ID": d["bin_id"],
+        "Current Fill": f"{d['current_fill']:.1f}%",
+        "Predicted (+10m)": f"{d['predicted_fill']:.1f}%" if d["predicted_fill"] is not None else "—",
+        "Remaining Time": format_remaining(d),
         "Tree Signal": "Collect" if d["tree_prediction"] == 1 else "OK",
         "Regression Signal": "Collect" if d["regression_prediction"] else "OK",
         "Model Conflict": "⚠️ YES" if d["prediction_conflict"] else "No"
