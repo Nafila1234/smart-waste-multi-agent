@@ -1,16 +1,3 @@
-"""
-Coordinator of the Smart Waste Collection multi-agent system.
-
-For every bin :
-    photo   -> VisualAdapter   -> waste type, confidence, hazard flag
-    sensors -> PredictionAgent -> fill forecast, tree / regression signals
-    both    -> DecisionAgent   -> priority and action
-Then all decisions -> RoutingAgent -> ordered collection route.
-
-Place this file in the `integration/` folder of the repository.
-Run scripts from the repository root, for example:
-    python tests/test_coordinator.py
-"""
 
 import sys
 from pathlib import Path
